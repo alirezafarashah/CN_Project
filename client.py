@@ -9,7 +9,7 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 host_ip = 'localhost'
 port = 10050
 client_socket.connect((host_ip, port))
-is_logged_in = True
+is_logged_in = False
 
 
 def receive_video(rcv_socket, addr):
@@ -38,34 +38,30 @@ def receive_video(rcv_socket, addr):
 
 
 while True:
-    while not is_logged_in:
-        command = input("login/register_user/register_admin: ")
-        if command.startswith("register_user"):
-            username = input("username: ")
-            password = input("password: ")
-            client_socket.send(("register " + username + " " + password).encode())
-            result = client_socket.recv(1024).decode()
-            if result.startswith("success"):
-                is_logged_in = True
-            else:
-                print(result)
-        elif command.startswith("register_admin"):
-            # TODO
-            pass
-        elif command.startswith("login"):
-            username = input("username: ")
-            password = input("password: ")
-            client_socket.send(("login " + username + " " + password).encode())
-            result = client_socket.recv(1024).decode()
-            if result.startswith("success"):
-                is_logged_in = True
-            else:
-                print(result)
-        else:
-            print("invalid command")
-
-    command = input("please enter command: ")
-    if command.startswith("send_file"):
+    command = input()
+    if command.startswith("help"):
+        client_socket.send("help".encode())
+        result = client_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("register_user"):
+        username = input("username: ")
+        password = input("password: ")
+        client_socket.send(("register_user " + username + " " + password).encode())
+        result = client_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("register_admin"):
+        username = input("username: ")
+        password = input("password: ")
+        client_socket.send(("register_admin " + username + " " + password).encode())
+        result = client_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("login"):
+        username = input("username: ")
+        password = input("password: ")
+        client_socket.send(("login " + username + " " + password).encode())
+        result = client_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("send_file"):
         file_name = command.split()[1]
         data = "send_file " + file_name
         client_socket.send(data.encode())
@@ -83,7 +79,6 @@ while True:
         else:
             print("error")
             break
-
     elif command.startswith("play"):
         client_socket.send(command.encode())
         result = client_socket.recv(1024).decode()
@@ -99,3 +94,33 @@ while True:
                 rcv_socket.close()
                 video_socket.close()
                 break
+    elif command.startswith("show all requests"):
+        client_socket.send("show all requests".encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("accept admin"):
+        username = input("username: ")
+        client_socket.send(("accept admin" + " " + username).encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("show all videos"):
+        client_socket.send(command.encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("show video detail"):
+        video_name = input("video_name: ")
+        client_socket.send((command + " " + video_name).encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("like"):
+        video_name = input("video_name: ")
+        client_socket.send((command + " " + video_name).encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("dislike"):
+        video_name = input("video_name: ")
+        client_socket.send((command + " " + video_name).encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    else:
+        print("invalid command2")

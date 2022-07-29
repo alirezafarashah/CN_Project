@@ -1,5 +1,5 @@
 from User import *
-
+from video import *
 # importing libraries
 import socket
 import cv2
@@ -23,9 +23,10 @@ print('Socket now listening')
 authenticator = Authenticator()
 authorizer = Authorizer(authenticator)
 authenticator.add_user("manager", "supreme_manager#2022", "manager")
+video_manager = VideoManager()
 
 
-def handle_request(user_socket, user_addr):
+def handle_user_client_request(user_socket, user):
     while True:
         command = user_socket.recv(1024).decode()
         if command.startswith("send_file"):
@@ -39,6 +40,7 @@ def handle_request(user_socket, user_addr):
                 recv_file.write(file_to_recv)
                 file_to_recv = user_socket.recv(4096)
             print("File recv or converted sucessfully.")
+            video_manager.videos.append(Video(user.username, file_name))
             return
         elif user_socket and command.startswith("play"):
             file_name = command.split()[1]
@@ -62,25 +64,152 @@ def handle_request(user_socket, user_addr):
                     break
                 print("sending...")
             video_socket.close()
+        elif command.startswith("show all videos"):
+            send_list_of_videos(user_socket)
+        elif command.startswith("show video detail"):
+            video_name = command.split()[3]
+            send_video_details(user_socket, video_name)
+        elif command.startswith("like"):
+            video_name = command.split()[1]
+            try:
+                video_manager.like_video(video_name, user.username)
+                user_socket.send("The video has successfully liked".encode())
+            except VideoException as e:
+                user_socket.send(str(e).encode())
+        elif command.startswith("dislike"):
+            video_name = command.split()[1]
+            try:
+                video_manager.dislike_video(video_name, user.username)
+                user_socket.send("The video has successfully disliked".encode())
+            except VideoException as e:
+                user_socket.send(str(e).encode())
+        elif command.startswith("dislike"):
+            video_name = command.split()[1]
+            try:
+                video_manager.dislike_video(video_name, user.username)
+                user_socket.send("The video has successfully disliked".encode())
+            except VideoException as e:
+                user_socket.send(e.encode())
+        elif command.startswith("help"):
+            user_socket.send("send_file\nplay\nlogout\nshow all videos\nshow video detail\nlike\ndislike".encode())
 
-        elif command.startswith("register_user"):
+
+def accept_admin(command, manager):
+    username = command.split()[2]
+    try:
+        for admin in manager.admin_requests:
+            if username == admin.username:
+                manager.admin_requests.remove(admin)
+                authenticator.add_user(admin.username, admin.password, admin.type)
+                return "admin is successfully accepted"
+    except UsernameAlreadyExists:
+        return "username already exist"
+
+    return "invalid username"
+
+
+def handle_manager_request(user_socket, manager):
+    while True:
+        command = user_socket.recv(1024).decode()
+        if command.startswith("show all requests"):
+            res = "These are all requests:\n"
+            for user in manager.admin_requests:
+                res += user.username + "\n"
+            user_socket.send(res.encode())
+        elif command.startswith("accept admin"):
+            user_socket.send(accept_admin(command, manager).encode())
+        elif command.startswith("help"):
+            user_socket.send("show all requests\naccept admin\nlogout\nshow all videos\nshow video detail\n".encode())
+        elif command.startswith("show all videos"):
+            send_list_of_videos(user_socket)
+        elif command.startswith("show video detail"):
+            video_name = command.split()[3]
+            send_video_details(user_socket, video_name)
+        else:
+            user_socket.send("invalid command".encode())
+
+
+def handle_admin_request(user_socket, admin):
+    while True:
+        command = user_socket.recv(1024).decode()
+        if command.startswith("help"):
+            user_socket.send("logout\nshow all videos\n".encode())
+        elif command.startswith("show all videos"):
+            send_list_of_videos(user_socket)
+
+
+def send_list_of_videos(user_socket):
+    res = ""
+    for video in video_manager.videos:
+        res += video.name + "\n"
+    user_socket.send(res.encode())
+
+
+def get_details(video):
+    res = ""
+    res += f'likes: {len(video.likes)}\n'
+    res += f'dislikes: {len(video.dislike)}\nComments:\n'
+    for comment in video.comments:
+        res += comment + "\n"
+    res += 'limitations:\n'
+    for limits in video.limitations:
+        res += limits + "\n"
+
+    return res
+
+
+def send_video_details(user_socket, file_name):
+    for video in video_manager.videos:
+        if video.name == file_name:
+            user_socket.send(get_details(video).encode())
+            return
+    user_socket.send("video doesn't exist".encode())
+
+
+def handle_request(user_socket, user_addr):
+    while True:
+        command = user_socket.recv(1024).decode()
+        if command.startswith("register_user"):
             try:
                 username = command.split()[1]
                 password = command.split()[2]
                 authenticator.add_user(username, password, "user")
-                authenticator.login(username, password)
+                user = authenticator.login(username, password)
                 user_socket.send("successful".encode())
+                handle_user_client_request(user_socket, user)
             except UsernameAlreadyExists:
                 user_socket.send("username already exist".encode())
-
+        elif command.startswith("register_admin"):
+            try:
+                username = command.split()[1]
+                password = command.split()[2]
+                authenticator.send_admin_reg_req(username, password, "admin")
+                user_socket.send("Admin registration request has sent to manager.".encode())
+            except UsernameAlreadyExists:
+                user_socket.send("username already exist".encode())
         elif command.startswith("login"):
             try:
                 username = command.split()[1]
                 password = command.split()[2]
-                authenticator.login(username, password)
+                user = authenticator.login(username, password)
                 user_socket.send("successful".encode())
-            except InvalidUsername or InvalidPassword:
-                user_socket.send("wrong username or password".encode())
+                if user.type == "user":
+                    handle_user_client_request(user_socket, user)
+                elif user.type == "manager":
+                    handle_manager_request(user_socket, user)
+                else:
+                    handle_admin_request(user_socket, user)
+            except AuthException:
+                user_socket.send(("wrong username or password").encode())
+        elif command.startswith("help"):
+            user_socket.send("login\nregister_user\nregister_admin\nshow all videos\nshow video detail\n".encode())
+        elif command.startswith("show all videos"):
+            send_list_of_videos(user_socket)
+        elif command.startswith("show video detail"):
+            video_name = command.split()[3]
+            send_video_details(user_socket, video_name)
+        else:
+            user_socket.send("invalid command".encode())
 
 
 while True:

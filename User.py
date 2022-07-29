@@ -12,6 +12,22 @@ class User:
         return password == self.password
 
 
+class UserClient(User):
+    def __init__(self, username, password, role):
+        super().__init__(username, password, role)
+        self.strike = False
+
+
+class Admin(User):
+    pass
+
+
+class Manager(User):
+    def __init__(self, username, password, role):
+        super().__init__(username, password, role)
+        self.admin_requests = []
+
+
 class AuthException(Exception):
     def __init__(self, username, user=None):
         super().__init__(username)
@@ -54,7 +70,12 @@ class Authenticator:
     def add_user(self, username, password, role):
         if username in self.users:
             raise UsernameAlreadyExists(username)
-        self.users[username] = User(username, password, role)
+        if role == "user":
+            self.users[username] = UserClient(username, password, role)
+        elif role == "manager":
+            self.users[username] = Manager(username, password, role)
+        else:
+            self.users[username] = Admin(username, password, role)
 
     def login(self, username, password):
         try:
@@ -66,7 +87,13 @@ class Authenticator:
             raise InvalidPassword(username, user)
 
         user.is_logged_in = True
-        return True
+        return user
+
+    def send_admin_reg_req(self, user_name, password, role):
+        if user_name in self.users:
+            raise UsernameAlreadyExists(user_name)
+        manager = self.users["manager"]
+        manager.admin_requests.append(Admin(user_name, password, role))
 
     def is_logged_in(self, username):
         if username in self.users:
