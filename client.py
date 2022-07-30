@@ -134,5 +134,28 @@ while True:
         client_socket.send((command + " " + video_name).encode())
         res = client_socket.recv(1024).decode()
         print(res)
+    elif command.startswith("comment"):
+        video_name = input("video_name: ")
+        client_socket.send((command + " " + video_name).encode())
+        comment = input("comment: ")
+        client_socket.send(comment.encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("logout"):
+        client_socket.send(command.encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("add limit"):
+        video_name = input("video_name: ")
+        client_socket.send((command + " " + video_name).encode())
+        limit = input("limitation: ")
+        client_socket.send(limit.encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("delete video"):
+        video_name = input("video_name: ")
+        client_socket.send((command + " " + video_name).encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
     else:
         print("invalid command2")

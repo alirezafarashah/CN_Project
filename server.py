@@ -7,6 +7,7 @@ import pickle
 import struct
 import sys
 from threading import Thread
+import os
 
 users = {}
 
@@ -23,7 +24,8 @@ print('Socket now listening')
 authenticator = Authenticator()
 authorizer = Authorizer(authenticator)
 authenticator.add_user("manager", "supreme_manager#2022", "manager")
-authenticator.add_user("a", "a", "user")
+authenticator.add_user("a", "a", "admin")
+authenticator.add_user("b", "b", "user")
 video_manager = VideoManager()
 
 
@@ -78,25 +80,30 @@ def handle_user_client_request(user_socket, user):
             video_name = command.split()[1]
             try:
                 video_manager.like_video(video_name, user.username)
-                user_socket.send("The video has successfully liked".encode())
+                user_socket.send("The video has been successfully liked".encode())
             except VideoException as e:
                 user_socket.send(str(e).encode())
         elif command.startswith("dislike"):
             video_name = command.split()[1]
             try:
                 video_manager.dislike_video(video_name, user.username)
-                user_socket.send("The video has successfully disliked".encode())
+                user_socket.send("The video has been successfully disliked".encode())
             except VideoException as e:
                 user_socket.send(str(e).encode())
-        elif command.startswith("dislike"):
+        elif command.startswith("comment"):
             video_name = command.split()[1]
+            comment = user_socket.recv(1024).decode()
             try:
-                video_manager.dislike_video(video_name, user.username)
-                user_socket.send("The video has successfully disliked".encode())
+                video_manager.add_comment(video_name, comment, user.username)
+                user_socket.send("Your comment has been successfully registered".encode())
             except VideoException as e:
-                user_socket.send(e.encode())
+                user_socket.send(str(e).encode())
+        elif command.startswith("logout"):
+            user_socket.send("You have successfully logged out".encode())
+            return
         elif command.startswith("help"):
-            user_socket.send("send_file\nplay\nlogout\nshow all videos\nshow video detail\nlike\ndislike".encode())
+            user_socket.send(
+                "send_file\nplay\nlogout\nshow all videos\nshow video detail\nlike\ndislike\ncomment\nlogout".encode())
 
 
 def accept_admin(command, manager):
@@ -130,6 +137,9 @@ def handle_manager_request(user_socket, manager):
         elif command.startswith("show video detail"):
             video_name = command.split()[3]
             send_video_details(user_socket, video_name)
+        elif command.startswith("logout"):
+            user_socket.send("You have successfully logged out".encode())
+            return
         else:
             user_socket.send("invalid command".encode())
 
@@ -138,13 +148,36 @@ def handle_admin_request(user_socket, admin):
     while True:
         command = user_socket.recv(1024).decode()
         if command.startswith("help"):
-            user_socket.send("logout\nshow all videos\n".encode())
+            user_socket.send("logout\nshow all videos\nadd limitation\ndelete video\n".encode())
         elif command.startswith("show all videos"):
             send_list_of_videos(user_socket)
+        elif command.startswith("show video detail"):
+            video_name = command.split()[3]
+            send_video_details(user_socket, video_name)
+        elif command.startswith("logout"):
+            user_socket.send("You have successfully logged out".encode())
+            return
+        elif command.startswith("add limitation"):
+            video_name = command.split()[2]
+            limit = user_socket.recv(1024).decode()
+            try:
+                video_manager.add_detail(video_name, limit, admin.username)
+                user_socket.send("Your limitation has been successfully added".encode())
+            except VideoException as e:
+                user_socket.send(str(e).encode())
+        elif command.startswith("delete video"):
+            try:
+                video_name = command.split()[2]
+                video_manager.delete_video(video_name)
+                user_socket.send("The video has been deleted successfully".encode())
+            except VideoException as e:
+                user_socket.send(str(e).encode())
+        else:
+            user_socket.send("invalid command".encode())
 
 
 def send_list_of_videos(user_socket):
-    res = ""
+    res = "These are list of videos\n"
     for video in video_manager.videos:
         res += video.name + "\n"
     user_socket.send(res.encode())

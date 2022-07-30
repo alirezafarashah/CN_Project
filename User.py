@@ -15,7 +15,7 @@ class User:
 class UserClient(User):
     def __init__(self, username, password, role):
         super().__init__(username, password, role)
-        self.strike = False
+        self.strike = 0
 
 
 class Admin(User):

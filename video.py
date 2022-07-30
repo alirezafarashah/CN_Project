@@ -1,3 +1,5 @@
+import os
+
 class Video():
     def __init__(self, user, video_name):
         self.name = video_name
@@ -44,4 +46,9 @@ class VideoManager():
                 return video
         raise VideoException("video not found")
 
+    def delete_video(self, video_name):
+        video = self.find_video(video_name)
+        video.uploader.strike += 1
+        self.videos.remove(video)
+        os.remove(f'server_file/{video_name}')
 
