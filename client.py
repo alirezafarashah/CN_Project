@@ -3,13 +3,23 @@ import socket
 import cv2
 import pickle
 import struct
-import imutils
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 host_ip = 'localhost'
 port = 10050
 client_socket.connect((host_ip, port))
 is_logged_in = False
+
+
+def send_file(snd_socket, addr):
+    video_file = open(file_name, 'rb')
+    buffer = video_file.read(4069)
+    while buffer:
+        print('Sending your file...')
+        send_socket.send(buffer)
+        buffer = video_file.read(4096)
+    video_file.close()
+    print("File sended sucessfully\n clossing...")
 
 
 def receive_video(rcv_socket, addr):
@@ -67,15 +77,17 @@ while True:
         client_socket.send(data.encode())
         message = client_socket.recv(1024).decode()
         if message.startswith("ready"):
-            tosend_file = open(file_name, 'rb')
-            Filetosend = tosend_file.read(4069)
-            while (Filetosend):
-                print('Sending your file...')
-                client_socket.send(Filetosend)
-                Filetosend = tosend_file.read(4096)
-            tosend_file.close()
-            print("File sended sucessfully\n clossing...")
-            break
+            file_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            file_socket.bind(("localhost", 0))
+            file_socket.listen()
+            port = file_socket.getsockname()[1]
+            client_socket.send(("port: " + str(port)).encode())
+            while True:
+                send_socket, addr = file_socket.accept()
+                send_file(send_socket, addr)
+                file_socket.close()
+                send_socket.close()
+                break
         else:
             print("error")
             break

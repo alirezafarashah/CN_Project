@@ -23,6 +23,7 @@ print('Socket now listening')
 authenticator = Authenticator()
 authorizer = Authorizer(authenticator)
 authenticator.add_user("manager", "supreme_manager#2022", "manager")
+authenticator.add_user("a", "a", "user")
 video_manager = VideoManager()
 
 
@@ -34,14 +35,18 @@ def handle_user_client_request(user_socket, user):
             data = "ready"
             user_socket.send(data.encode())
             recv_file = open('server_file/' + file_name, 'wb')
-            file_to_recv = user_socket.recv(4096)
+            video_port = int(user_socket.recv(1024).decode().split()[1])
+            rcv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            rcv_socket.connect((addr[0], video_port))
+            file_to_recv = rcv_socket.recv(4096)
             while file_to_recv:
                 print("Receiving...")
                 recv_file.write(file_to_recv)
-                file_to_recv = user_socket.recv(4096)
+                file_to_recv = rcv_socket.recv(4096)
+            recv_file.close()
             print("File recv or converted sucessfully.")
             video_manager.videos.append(Video(user.username, file_name))
-            return
+            rcv_socket.close()
         elif user_socket and command.startswith("play"):
             file_name = command.split()[1]
             vid = cv2.VideoCapture('server_file/' + file_name)
@@ -200,7 +205,7 @@ def handle_request(user_socket, user_addr):
                 else:
                     handle_admin_request(user_socket, user)
             except AuthException:
-                user_socket.send(("wrong username or password").encode())
+                user_socket.send("wrong username or password".encode())
         elif command.startswith("help"):
             user_socket.send("login\nregister_user\nregister_admin\nshow all videos\nshow video detail\n".encode())
         elif command.startswith("show all videos"):
