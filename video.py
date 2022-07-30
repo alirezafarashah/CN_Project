@@ -48,7 +48,7 @@ class VideoManager():
 
     def delete_video(self, video_name):
         video = self.find_video(video_name)
-        video.uploader.strike += 1
         self.videos.remove(video)
         os.remove(f'server_file/{video_name}')
+        return video
 

@@ -34,6 +34,10 @@ def handle_user_client_request(user_socket, user):
         command = user_socket.recv(1024).decode()
         if command.startswith("send_file"):
             file_name = command.split()[1]
+            if user.strike >= 2:
+                data = "You cannot upload video"
+                user_socket.send(data.encode())
+                continue
             data = "ready"
             user_socket.send(data.encode())
             recv_file = open('server_file/' + file_name, 'wb')
@@ -168,12 +172,23 @@ def handle_admin_request(user_socket, admin):
         elif command.startswith("delete video"):
             try:
                 video_name = command.split()[2]
-                video_manager.delete_video(video_name)
+                video = video_manager.delete_video(video_name)
+                user = authenticator.users[video.uploader]
+                user.strike += 1
                 user_socket.send("The video has been deleted successfully".encode())
             except VideoException as e:
                 user_socket.send(str(e).encode())
+        elif command.startswith("remove strike"):
+            try:
+                user_name = command.split()[2]
+                user = authenticator.users[user_name]
+                user.strike = 0
+                user_socket.send("User's strike has been successfully removed".encode())
+            except KeyError as e:
+                user_socket.send("wrong user name".encode())
         else:
             user_socket.send("invalid command".encode())
+
 
 
 def send_list_of_videos(user_socket):

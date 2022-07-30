@@ -89,8 +89,8 @@ while True:
                 send_socket.close()
                 break
         else:
-            print("error")
-            break
+            print(message)
+
     elif command.startswith("play"):
         client_socket.send(command.encode())
         result = client_socket.recv(1024).decode()
@@ -155,6 +155,11 @@ while True:
     elif command.startswith("delete video"):
         video_name = input("video_name: ")
         client_socket.send((command + " " + video_name).encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+    elif command.startswith("remove strike"):
+        user_name = input("user_name: ")
+        client_socket.send((command + " " + user_name).encode())
         res = client_socket.recv(1024).decode()
         print(res)
     else:
