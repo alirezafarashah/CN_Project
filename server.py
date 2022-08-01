@@ -11,6 +11,9 @@ import os
 
 users = {}
 
+proxy_IP = "localhost"
+proxy_PORT = 20000
+
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 host_name = socket.gethostname()
 HOST_IP = "localhost"
@@ -54,27 +57,28 @@ def handle_user_client_request(user_socket, user):
             video_manager.videos.append(Video(user.username, file_name))
             rcv_socket.close()
         elif user_socket and command.startswith("play"):
-            file_name = command.split()[1]
-            vid = cv2.VideoCapture('server_file/' + file_name)
-            print("opened")
-            user_socket.send("ready to send".encode())
-            video_port = int(user_socket.recv(1024).decode().split()[1])
-            video_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            video_socket.connect((addr[0], video_port))
-            while vid.isOpened():
-                img, frame = vid.read()
-                a = pickle.dumps(frame)
-                message = struct.pack("Q", len(a)) + a
-                try:
-                    video_socket.sendall(message)
-                except:
-                    print("client disconnected")
-                    break
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('q'):
-                    break
-                print("sending...")
-            video_socket.close()
+            play_vid(command, user_socket)
+            # file_name = command.split()[1]
+            # vid = cv2.VideoCapture('server_file/' + file_name)
+            # print("opened")
+            # user_socket.send("ready to send".encode())
+            # video_port = int(user_socket.recv(1024).decode().split()[1])
+            # video_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # video_socket.connect((addr[0], video_port))
+            # while vid.isOpened():
+            #     img, frame = vid.read()
+            #     a = pickle.dumps(frame)
+            #     message = struct.pack("Q", len(a)) + a
+            #     try:
+            #         video_socket.sendall(message)
+            #     except:
+            #         print("client disconnected")
+            #         break
+            #     key = cv2.waitKey(1) & 0xFF
+            #     if key == ord('q'):
+            #         break
+            #     print("sending...")
+            # video_socket.close()
         elif command.startswith("show all videos"):
             send_list_of_videos(user_socket)
         elif command.startswith("show video detail"):
@@ -108,6 +112,30 @@ def handle_user_client_request(user_socket, user):
         elif command.startswith("help"):
             user_socket.send(
                 "send_file\nplay\nlogout\nshow all videos\nshow video detail\nlike\ndislike\ncomment\nlogout".encode())
+
+
+def play_vid(command, user_socket):
+    file_name = command.split()[1]
+    vid = cv2.VideoCapture('server_file/' + file_name)
+    print("opened")
+    user_socket.send("ready to send".encode())
+    video_port = int(user_socket.recv(1024).decode().split()[1])
+    video_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    video_socket.connect((addr[0], video_port))
+    while vid.isOpened():
+        img, frame = vid.read()
+        a = pickle.dumps(frame)
+        message = struct.pack("Q", len(a)) + a
+        try:
+            video_socket.sendall(message)
+        except:
+            print("client disconnected")
+            break
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+        print("sending...")
+    video_socket.close()
 
 
 def accept_admin(command, manager):
@@ -144,11 +172,20 @@ def handle_manager_request(user_socket, manager):
         elif command.startswith("logout"):
             user_socket.send("You have successfully logged out".encode())
             return
+        elif command.startswith("set password"):
+            new_password = command.split()[2]
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind((HOST_IP, 10051))
+            s.connect((proxy_IP, proxy_PORT))
+            s.send(new_password.encode())
+            s.close()
+            user_socket.send("You have successfully changed password".encode())
         else:
             user_socket.send("invalid command".encode())
 
 
 def handle_admin_request(user_socket, admin):
+    print("admin mode")
     while True:
         command = user_socket.recv(1024).decode()
         if command.startswith("help"):
@@ -163,6 +200,7 @@ def handle_admin_request(user_socket, admin):
             return
         elif command.startswith("add limitation"):
             video_name = command.split()[2]
+            user_socket.send("ready".encode())
             limit = user_socket.recv(1024).decode()
             try:
                 video_manager.add_detail(video_name, limit, admin.username)
@@ -188,7 +226,6 @@ def handle_admin_request(user_socket, admin):
                 user_socket.send("wrong user name".encode())
         else:
             user_socket.send("invalid command".encode())
-
 
 
 def send_list_of_videos(user_socket):
@@ -240,6 +277,12 @@ def handle_request(user_socket, user_addr):
                 user_socket.send("Admin registration request has sent to manager.".encode())
             except UsernameAlreadyExists:
                 user_socket.send("username already exist".encode())
+        elif command.startswith("login_admin"):
+            username = command.split()[1]
+            password = command.split()[2]
+            user = authenticator.login(username, password)
+            user_socket.send("successful".encode())
+            handle_admin_request(user_socket, user)
         elif command.startswith("login"):
             try:
                 username = command.split()[1]
@@ -250,10 +293,11 @@ def handle_request(user_socket, user_addr):
                     handle_user_client_request(user_socket, user)
                 elif user.type == "manager":
                     handle_manager_request(user_socket, user)
-                else:
-                    handle_admin_request(user_socket, user)
+                # else:
+                #     handle_admin_request(user_socket, user)
             except AuthException:
                 user_socket.send("wrong username or password".encode())
+
         elif command.startswith("help"):
             user_socket.send("login\nregister_user\nregister_admin\nshow all videos\nshow video detail\n".encode())
         elif command.startswith("show all videos"):
@@ -261,6 +305,8 @@ def handle_request(user_socket, user_addr):
         elif command.startswith("show video detail"):
             video_name = command.split()[3]
             send_video_details(user_socket, video_name)
+        elif user_socket and command.startswith("play"):
+            play_vid(command, user_socket)
         else:
             user_socket.send("invalid command".encode())
 

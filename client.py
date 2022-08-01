@@ -4,11 +4,15 @@ import cv2
 import pickle
 import struct
 
+proxy_IP = "localhost"
+proxy_PORT = 20000
+
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 host_ip = 'localhost'
 port = 10050
 client_socket.connect((host_ip, port))
 is_logged_in = False
+proxy_socket = None
 
 
 def send_file(snd_socket, addr):
@@ -65,12 +69,20 @@ while True:
         client_socket.send(("register_admin " + username + " " + password).encode())
         result = client_socket.recv(1024).decode()
         print(result)
-    elif command.startswith("login"):
+    elif command == "login":
         username = input("username: ")
         password = input("password: ")
         client_socket.send(("login " + username + " " + password).encode())
         result = client_socket.recv(1024).decode()
         print(result)
+
+    elif command.startswith("login_admin"):
+        username = input("username: ")
+        password = input("password: ")
+        proxy_socket.send(("login_admin " + username + " " + password).encode())
+        result = proxy_socket.recv(1024).decode()
+        print(result)
+
     elif command.startswith("send_file"):
         file_name = command.split()[1]
         data = "send_file " + file_name
@@ -106,6 +118,7 @@ while True:
                 rcv_socket.close()
                 video_socket.close()
                 break
+
     elif command.startswith("show all requests"):
         client_socket.send("show all requests".encode())
         res = client_socket.recv(1024).decode()
@@ -145,22 +158,51 @@ while True:
         client_socket.send(command.encode())
         res = client_socket.recv(1024).decode()
         print(res)
+
+    elif command.startswith("set password"):
+        client_socket.send(command.encode())
+        res = client_socket.recv(1024).decode()
+        print(res)
+
+    # admin
     elif command.startswith("add limit"):
         video_name = input("video_name: ")
-        client_socket.send((command + " " + video_name).encode())
+        proxy_socket.send((command + " " + video_name).encode())
+        proxy_socket.recv(1024)
         limit = input("limitation: ")
-        client_socket.send(limit.encode())
-        res = client_socket.recv(1024).decode()
+        proxy_socket.send(limit.encode())
+        res = proxy_socket.recv(1024).decode()
         print(res)
+
+    # admin
     elif command.startswith("delete video"):
         video_name = input("video_name: ")
-        client_socket.send((command + " " + video_name).encode())
-        res = client_socket.recv(1024).decode()
+        proxy_socket.send((command + " " + video_name).encode())
+        res = proxy_socket.recv(1024).decode()
         print(res)
+    # admin
     elif command.startswith("remove strike"):
         user_name = input("user_name: ")
-        client_socket.send((command + " " + user_name).encode())
-        res = client_socket.recv(1024).decode()
+        proxy_socket.send((command + " " + user_name).encode())
+        res = proxy_socket.recv(1024).decode()
         print(res)
+
+    # admin
+    elif command.startswith("proxy"):
+        proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        proxy_socket.connect((proxy_IP, proxy_PORT))
+        proxy_pass = input("proxy password: ")
+        proxy_socket.sendall(proxy_pass.encode())
+        res = proxy_socket.recv(1024).decode()
+        print(res)
+
+    # admin
+    elif command.startswith("login_admin"):
+        username = input("username: ")
+        password = input("password: ")
+        proxy_socket.send(("login_admin " + username + " " + password).encode())
+        result = proxy_socket.recv(1024).decode()
+        print(result)
+
     else:
         print("invalid command2")
