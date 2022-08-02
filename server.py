@@ -1,5 +1,6 @@
 from User import *
 from video import *
+from ticket import Ticket
 # importing libraries
 import socket
 import cv2
@@ -9,7 +10,6 @@ import sys
 from threading import Thread
 import os
 
-users = {}
 
 proxy_IP = "localhost"
 proxy_PORT = 20000
@@ -30,6 +30,7 @@ authenticator.add_user("manager", "supreme_manager#2022", "manager")
 authenticator.add_user("a", "a", "admin")
 authenticator.add_user("b", "b", "user")
 video_manager = VideoManager()
+tickets = {}
 
 
 def handle_user_client_request(user_socket, user):
@@ -106,12 +107,31 @@ def handle_user_client_request(user_socket, user):
                 user_socket.send("Your comment has been successfully registered".encode())
             except VideoException as e:
                 user_socket.send(str(e).encode())
+        elif command.startswith("show sent tickets"):
+            user_socket.send(show_sent_tickets(user, user.sent_tickets).encode())
+        elif command.startswith("show tickets"):
+            res = show_tickets(user, user.sent_tickets)
+            user_socket.send(res.encode())
         elif command.startswith("logout"):
             user_socket.send("You have successfully logged out".encode())
             return
+        elif command.startswith("add message to ticket"):
+            ticket_id = command.split()[2]
+            message = user_socket.recv(1024).decode()
+            try:
+                add_message_to_ticket(ticket_id, message)
+                user_socket.send("Successful".encode())
+            except Exception as e:
+                user_socket.send("Invalid ticket_id".encode())
+        elif command.startswith("create new ticket"):
+            message = user_socket.recv(1024).decode()
+            create_new_ticket(message, user.username, "server")
+            user_socket.send("Successful".encode())
+
         elif command.startswith("help"):
             user_socket.send(
-                "send_file\nplay\nlogout\nshow all videos\nshow video detail\nlike\ndislike\ncomment\nlogout".encode())
+                "send_file\nplay\ncreate new ticket\nadd message to ticket\nshow sent tickets\nshow tickets\nlogout\nshow all videos\nshow video "
+                "detail\nlike\ndislike\ncomment\nlogout".encode())
 
 
 def play_vid(command, user_socket):
@@ -180,8 +200,70 @@ def handle_manager_request(user_socket, manager):
             s.send(new_password.encode())
             s.close()
             user_socket.send("You have successfully changed password".encode())
+        elif command.startswith("show sent tickets"):
+            response = show_sent_tickets(manager, manager.received_tickets)
+            user_socket.send(response.encode())
+        elif command.startswith("show tickets"):
+            response = show_tickets(manager, manager.received_tickets)
+            user_socket.send(response.encode())
         else:
             user_socket.send("invalid command".encode())
+
+
+def show_tickets(user, tickets_user):
+    res = "These are all tickets:\n"
+    for ticket_id in tickets_user:
+        ticket = tickets[ticket_id]
+        if ticket.status == "sent":
+            continue
+        for i in range(0, len(ticket.message_sender)):
+            if i == len(ticket.message_sender)-1 and len(ticket.message_sender) > len(ticket.message_receiver):
+                res += f'\nticket id: {ticket.id}\nsender: {ticket.message_sender[i]}\n'
+            else:
+                res += f'\nsender: {ticket.message_sender[i]}' \
+                       f'\nreceiver: {ticket.message_receiver[i]}\n'
+    return res
+
+
+def show_sent_tickets(user, tickets_user):
+    res = "These are sent tickets:\n"
+    for ticket_id in tickets_user:
+        ticket = tickets[ticket_id]
+        if ticket.status != "sent":
+            continue
+        for i in range(0, len(ticket.message_sender)):
+            if i == len(ticket.message_sender) and len(ticket.message_sender) > len(ticket.message_receiver):
+                res += f'\nsender: {ticket.message_sender[i]}'
+            else:
+                res += f'\nsender: {ticket.message_sender[i]}' \
+                       f'\nreceiver: {ticket.message_receiver[i]}'
+    return res
+
+
+def add_message_to_ticket(ticket_id, message, user):
+    ticket = tickets[ticket_id]
+    if user.type != "manager" and ticket_id in user.sent_tickets:
+        ticket.message_sender.append(message)
+    elif user.type != "user" and ticket_id in user.received_tickets:
+        ticket.message_receiver.appent(message)
+    else:
+        raise Exception("You don't have access to this ticket")
+
+
+def create_new_ticket(message, sender_user_name, receiver):
+    ticket = Ticket(message, sender_user_name, receiver)
+    tickets[ticket.id] = ticket
+    user = authenticator.users[sender_user_name]
+    if user.type == "admin" and receiver == "manager":
+        user.sent_tickets.append(ticket.id)
+        authenticator.users[receiver].received_tickets.append(ticket.id)
+    elif user.type == "user" and receiver == "server":
+        user.sent_tickets.append(ticket.id)
+        for user in authenticator.users.values():
+            if user.type == "admin":
+                user.received_tickets.append(ticket.id)
+    else:
+        raise Exception("Invalid sender and receiver")
 
 
 def handle_admin_request(user_socket, admin):
@@ -189,7 +271,8 @@ def handle_admin_request(user_socket, admin):
     while True:
         command = user_socket.recv(1024).decode()
         if command.startswith("help"):
-            user_socket.send("logout\nshow all videos\nadd limitation\ndelete video\n".encode())
+            user_socket.send(
+                "logout\nadmin create new ticket\nadmin add message to ticket\nadmin show tickets\nadmin show sent tickets\nshow all videos\nadd limitation\ndelete video\n".encode())
         elif command.startswith("show all videos"):
             send_list_of_videos(user_socket)
         elif command.startswith("show video detail"):
@@ -216,6 +299,30 @@ def handle_admin_request(user_socket, admin):
                 user_socket.send("The video has been deleted successfully".encode())
             except VideoException as e:
                 user_socket.send(str(e).encode())
+        elif command.startswith("admin show sent tickets"):
+            response = "Received tickets:\n"
+            response += show_sent_tickets(admin, admin.received_tickets)
+            response += "Sent tickets:\n"
+            response += show_sent_tickets(admin, admin.sent_tickets)
+            user_socket.send(response.encode())
+        elif command.startswith("admin show tickets"):
+            response = "Received tickets:\n"
+            response += show_tickets(admin, admin.received_tickets)
+            response += "Sent tickets:\n"
+            response += show_tickets(admin, admin.sent_tickets)
+            user_socket.send(response.encode())
+        elif command.startswith("admin add message to ticket"):
+            ticket_id = command.split()[2]
+            message = user_socket.recv(1024).decode()
+            try:
+                add_message_to_ticket(ticket_id, message)
+                user_socket.send("Successful".encode())
+            except Exception as e:
+                user_socket.send("Invalid ticket_id".encode())
+        elif command.startswith("admin create new ticket"):
+            message = user_socket.recv(1024).decode()
+            create_new_ticket(message, admin.username, "manager")
+            user_socket.send("Successful".encode())
         elif command.startswith("remove strike"):
             try:
                 user_name = command.split()[2]
@@ -288,18 +395,21 @@ def handle_request(user_socket, user_addr):
                 username = command.split()[1]
                 password = command.split()[2]
                 user = authenticator.login(username, password)
-                user_socket.send("successful".encode())
                 if user.type == "user":
+                    user_socket.send("successful".encode())
                     handle_user_client_request(user_socket, user)
                 elif user.type == "manager":
+                    user_socket.send("successful".encode())
                     handle_manager_request(user_socket, user)
-                # else:
-                #     handle_admin_request(user_socket, user)
+                else:
+                    user_socket.send("admin must use login_admin command".encode())
+
             except AuthException:
                 user_socket.send("wrong username or password".encode())
 
         elif command.startswith("help"):
-            user_socket.send("login\nregister_user\nregister_admin\nshow all videos\nshow video detail\n".encode())
+            user_socket.send(
+                "login\nlogin_admin\nproxy\nregister_user\nregister_admin\nshow all videos\nshow video detail\n".encode())
         elif command.startswith("show all videos"):
             send_list_of_videos(user_socket)
         elif command.startswith("show video detail"):

@@ -158,12 +158,27 @@ while True:
         client_socket.send(command.encode())
         res = client_socket.recv(1024).decode()
         print(res)
-
     elif command.startswith("set password"):
         client_socket.send(command.encode())
         res = client_socket.recv(1024).decode()
         print(res)
-
+    elif command.startswith("create new ticket"):
+        client_socket.send("create new ticket".encode())
+        message = input("message: ")
+        client_socket.send(message.encode())
+        result = client_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("add message to ticket"):
+        ticket_id = input("ticket_id: ")
+        client_socket.send(f'{command} {ticket_id}'.encode())
+        message = input("message: ")
+        client_socket.send(message.encode())
+        result = client_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("show tickets"):
+        client_socket.send(command.encode())
+        result = client_socket.recv(1024).decode()
+        print(result)
     # admin
     elif command.startswith("add limit"):
         video_name = input("video_name: ")
@@ -203,6 +218,19 @@ while True:
         proxy_socket.send(("login_admin " + username + " " + password).encode())
         result = proxy_socket.recv(1024).decode()
         print(result)
-
+    elif command.startswith("admin_help"):
+        proxy_socket.send("help".encode())
+        result = proxy_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("admin create new ticket"):
+        proxy_socket.send("admin create new ticket".encode())
+        message = input("message: ")
+        proxy_socket.send(message.encode())
+        result = proxy_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("admin show ticket"):
+        proxy_socket.send("admin show tickets".encode())
+        result = proxy_socket.recv(1024).decode()
+        print(result)
     else:
         print("invalid command2")

@@ -16,9 +16,15 @@ class UserClient(User):
     def __init__(self, username, password, role):
         super().__init__(username, password, role)
         self.strike = 0
+        self.sent_tickets = []
 
 
 class Admin(User):
+    def __init__(self, username, password, role):
+        super().__init__(username, password, role)
+        self.received_tickets = []
+        self.sent_tickets = []
+
     pass
 
 
@@ -26,6 +32,7 @@ class Manager(User):
     def __init__(self, username, password, role):
         super().__init__(username, password, role)
         self.admin_requests = []
+        self.received_tickets = []
 
 
 class AuthException(Exception):
