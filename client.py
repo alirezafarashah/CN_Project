@@ -118,6 +118,8 @@ while True:
                 rcv_socket.close()
                 video_socket.close()
                 break
+        else:
+            print(result)
 
     elif command.startswith("show all requests"):
         client_socket.send("show all requests".encode())
@@ -154,7 +156,7 @@ while True:
         client_socket.send(comment.encode())
         res = client_socket.recv(1024).decode()
         print(res)
-    elif command.startswith("logout"):
+    elif command == "logout":
         client_socket.send(command.encode())
         res = client_socket.recv(1024).decode()
         print(res)
@@ -218,6 +220,12 @@ while True:
         proxy_socket.send(("login_admin " + username + " " + password).encode())
         result = proxy_socket.recv(1024).decode()
         print(result)
+    # admin
+    elif command.startswith("logout_admin"):
+        proxy_socket.send(command.encode())
+        res = proxy_socket.recv(1024).decode()
+        print(res)
+
     elif command.startswith("admin_help"):
         proxy_socket.send("help".encode())
         result = proxy_socket.recv(1024).decode()
