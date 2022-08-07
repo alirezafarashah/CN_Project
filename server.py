@@ -9,7 +9,10 @@ import struct
 import sys
 from threading import Thread
 import os
+import time
 
+REQ_RATE = 2
+CONNECTION_RATE = 2
 
 proxy_IP = "localhost"
 proxy_PORT = 20000
@@ -33,9 +36,13 @@ video_manager = VideoManager()
 tickets = {}
 
 
-def handle_user_client_request(user_socket, user):
+def handle_user_client_request(user_socket, user, number_of_req, start_time):
     while True:
         command = user_socket.recv(1024).decode()
+        if check_ddos(number_of_req, start_time):
+            user_socket.send("limit".encode())
+            user_socket.close()
+            return
         if command.startswith("send_file"):
             file_name = command.split()[1]
             if user.strike >= 2:
@@ -49,13 +56,18 @@ def handle_user_client_request(user_socket, user):
             rcv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             rcv_socket.connect((addr[0], video_port))
             file_to_recv = rcv_socket.recv(4096)
-            while file_to_recv:
+            number_of_chunks = 1
+            while file_to_recv and number_of_chunks < 12800:
                 print("Receiving...")
                 recv_file.write(file_to_recv)
                 file_to_recv = rcv_socket.recv(4096)
+                number_of_chunks += 1
             recv_file.close()
-            print("File recv or converted sucessfully.")
-            video_manager.videos.append(Video(user.username, file_name))
+            if number_of_chunks >= 12800:
+                print("more than 50MB")
+            else:
+                print("File recv or converted sucessfully.")
+                video_manager.videos.append(Video(user.username, file_name))
             rcv_socket.close()
         elif user_socket and command.startswith("play"):
             play_vid(command, user_socket)
@@ -136,6 +148,10 @@ def handle_user_client_request(user_socket, user):
 
 def play_vid(command, user_socket):
     file_name = command.split()[1]
+    if not os.path.exists('server_file/' + file_name):
+        print("doesn't exists")
+        user_socket.send("file not found".encode())
+        return
     vid = cv2.VideoCapture('server_file/' + file_name)
     print("opened")
     user_socket.send("ready to send".encode())
@@ -172,9 +188,13 @@ def accept_admin(command, manager):
     return "invalid username"
 
 
-def handle_manager_request(user_socket, manager):
+def handle_manager_request(user_socket, manager, number_of_req, start_time):
     while True:
         command = user_socket.recv(1024).decode()
+        if check_ddos(number_of_req, start_time):
+            user_socket.send("limit".encode())
+            user_socket.close()
+            return
         if command.startswith("show all requests"):
             res = "These are all requests:\n"
             for user in manager.admin_requests:
@@ -217,7 +237,7 @@ def show_tickets(user, tickets_user):
         if ticket.status == "sent":
             continue
         for i in range(0, len(ticket.message_sender)):
-            if i == len(ticket.message_sender)-1 and len(ticket.message_sender) > len(ticket.message_receiver):
+            if i == len(ticket.message_sender) - 1 and len(ticket.message_sender) > len(ticket.message_receiver):
                 res += f'\nticket id: {ticket.id}\nsender: {ticket.message_sender[i]}\n'
             else:
                 res += f'\nsender: {ticket.message_sender[i]}' \
@@ -266,10 +286,15 @@ def create_new_ticket(message, sender_user_name, receiver):
         raise Exception("Invalid sender and receiver")
 
 
-def handle_admin_request(user_socket, admin):
+def handle_admin_request(user_socket, admin, number_of_req, start_time):
     print("admin mode")
     while True:
         command = user_socket.recv(1024).decode()
+        number_of_req += 1
+        if check_ddos(number_of_req, start_time):
+            user_socket.send("limit".encode())
+            user_socket.close()
+            return
         if command.startswith("help"):
             user_socket.send(
                 "logout\nadmin create new ticket\nadmin add message to ticket\nadmin show tickets\nadmin show sent "
@@ -365,9 +390,15 @@ def send_video_details(user_socket, file_name):
     user_socket.send("video doesn't exist".encode())
 
 
-def handle_request(user_socket, user_addr):
+def handle_request(user_socket, user_addr, start_time):
+    number_of_req = 0
     while True:
         command = user_socket.recv(1024).decode()
+        number_of_req += 1
+        if check_ddos(number_of_req, start_time):
+            user_socket.send("limit".encode())
+            user_socket.close()
+            return
         if command.startswith("register_user"):
             try:
                 username = command.split()[1]
@@ -375,7 +406,7 @@ def handle_request(user_socket, user_addr):
                 authenticator.add_user(username, password, "user")
                 user = authenticator.login(username, password)
                 user_socket.send("successful".encode())
-                handle_user_client_request(user_socket, user)
+                handle_user_client_request(user_socket, user, number_of_req, start_time)
             except UsernameAlreadyExists:
                 user_socket.send("username already exist".encode())
         elif command.startswith("register_admin"):
@@ -391,7 +422,7 @@ def handle_request(user_socket, user_addr):
             password = command.split()[2]
             user = authenticator.login(username, password)
             user_socket.send("successful".encode())
-            handle_admin_request(user_socket, user)
+            handle_admin_request(user_socket, user, number_of_req, start_time)
         elif command.startswith("login"):
             try:
                 username = command.split()[1]
@@ -399,10 +430,10 @@ def handle_request(user_socket, user_addr):
                 user = authenticator.login(username, password)
                 if user.type == "user":
                     user_socket.send("successful".encode())
-                    handle_user_client_request(user_socket, user)
+                    handle_user_client_request(user_socket, user, number_of_req, start_time)
                 elif user.type == "manager":
                     user_socket.send("successful".encode())
-                    handle_manager_request(user_socket, user)
+                    handle_manager_request(user_socket, user, number_of_req, start_time)
                 else:
                     user_socket.send("admin must use login_admin command".encode())
 
@@ -423,9 +454,35 @@ def handle_request(user_socket, user_addr):
             user_socket.send("invalid command".encode())
 
 
+def check_ddos(num_req, start_time):
+    if num_req <= 5:
+        return False
+    if REQ_RATE < num_req / (time.time() - start_time):
+        print("ddos detected")
+        return True
+    return False
+
+
+def check_ddos2(addr):
+    global ip_dicts
+    if ip_dicts[addr][0] < 2:
+        return False
+    if (ip_dicts[addr][0] - 2) / (time.time() - ip_dicts[addr][1]) > CONNECTION_RATE:
+        print((ip_dicts[addr][0] - 2) / (time.time() - ip_dicts[addr][1]))
+        print("ddos detected type 2")
+        return True
+    return False
+
+
+ip_dicts = {}
+
 while True:
     client_socket, addr = server_socket.accept()
-    print('Connection from:', addr)
-    # handle_request(client_socket,addr)
-    thread = Thread(target=handle_request, args=(client_socket, addr,))
-    thread.start()
+    if addr not in ip_dicts.keys():
+        ip_dicts[addr] = [0, time.time()]
+    ip_dicts[addr][0] += 1
+    if not check_ddos2(addr):
+        print('Connection from:', addr)
+        time_now = time.time()
+        thread = Thread(target=handle_request, args=(client_socket, addr, time_now,))
+        thread.start()
