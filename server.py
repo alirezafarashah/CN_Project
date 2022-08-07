@@ -116,7 +116,7 @@ def handle_user_client_request(user_socket, user):
             user_socket.send("You have successfully logged out".encode())
             return
         elif command.startswith("add message to ticket"):
-            ticket_id = command.split()[2]
+            ticket_id = int(command.split()[4])
             message = user_socket.recv(1024).decode()
             try:
                 add_message_to_ticket(ticket_id, message)
@@ -272,7 +272,8 @@ def handle_admin_request(user_socket, admin):
         command = user_socket.recv(1024).decode()
         if command.startswith("help"):
             user_socket.send(
-                "logout\nadmin create new ticket\nadmin add message to ticket\nadmin show tickets\nadmin show sent tickets\nshow all videos\nadd limitation\ndelete video\n".encode())
+                "logout\nadmin create new ticket\nadmin add message to ticket\nadmin show tickets\nadmin show sent "
+                "tickets\nshow all videos\nadd limitation\ndelete video\n".encode())
         elif command.startswith("show all videos"):
             send_list_of_videos(user_socket)
         elif command.startswith("show video detail"):
@@ -320,6 +321,7 @@ def handle_admin_request(user_socket, admin):
             except Exception as e:
                 user_socket.send("Invalid ticket_id".encode())
         elif command.startswith("admin create new ticket"):
+            user_socket.send("message: ".encode())
             message = user_socket.recv(1024).decode()
             create_new_ticket(message, admin.username, "manager")
             user_socket.send("Successful".encode())

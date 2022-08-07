@@ -224,11 +224,12 @@ while True:
         print(result)
     elif command.startswith("admin create new ticket"):
         proxy_socket.send("admin create new ticket".encode())
-        message = input("message: ")
+        print(proxy_socket.recv(1024).decode())
+        message = input()
         proxy_socket.send(message.encode())
         result = proxy_socket.recv(1024).decode()
         print(result)
-    elif command.startswith("admin show ticket"):
+    elif command.startswith("admin show tickets"):
         proxy_socket.send("admin show tickets".encode())
         result = proxy_socket.recv(1024).decode()
         print(result)
