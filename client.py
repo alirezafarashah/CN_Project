@@ -241,5 +241,22 @@ while True:
         proxy_socket.send("admin show tickets".encode())
         result = proxy_socket.recv(1024).decode()
         print(result)
+    elif command.startswith("admin logout"):
+        proxy_socket.send("logout".encode())
+        result = proxy_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("admin add message to ticket"):
+        ticket_id = input("ticket_id: ")
+        proxy_socket.send((command + " " + ticket_id).encode())
+        print(proxy_socket.recv(1024).decode())
+        message = input("")
+        proxy_socket.send(message.encode())
+        result = proxy_socket.recv(1024).decode()
+        print(result)
+    elif command.startswith("admin change ticket status"):
+        ticket_id = input("ticket_id: ")
+        status = input("status: ")
+        proxy_socket.send((command + " " + ticket_id + " " + status).encode())
+        print(proxy_socket.recv(1024).decode())
     else:
         print("invalid command2")

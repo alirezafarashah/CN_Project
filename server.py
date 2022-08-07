@@ -131,15 +131,14 @@ def handle_user_client_request(user_socket, user, number_of_req, start_time):
             ticket_id = int(command.split()[4])
             message = user_socket.recv(1024).decode()
             try:
-                add_message_to_ticket(ticket_id, message)
+                add_message_to_ticket(ticket_id, message, user)
                 user_socket.send("Successful".encode())
             except Exception as e:
-                user_socket.send("Invalid ticket_id".encode())
+                user_socket.send(str(e).encode())
         elif command.startswith("create new ticket"):
             message = user_socket.recv(1024).decode()
             create_new_ticket(message, user.username, "server")
             user_socket.send("Successful".encode())
-
         elif command.startswith("help"):
             user_socket.send(
                 "send_file\nplay\ncreate new ticket\nadd message to ticket\nshow sent tickets\nshow tickets\nlogout\nshow all videos\nshow video "
@@ -226,6 +225,14 @@ def handle_manager_request(user_socket, manager, number_of_req, start_time):
         elif command.startswith("show tickets"):
             response = show_tickets(manager, manager.received_tickets)
             user_socket.send(response.encode())
+        elif command.startswith("add message to ticket"):
+            ticket_id = int(command.split()[4])
+            message = user_socket.recv(1024).decode()
+            try:
+                add_message_to_ticket(ticket_id, message, manager)
+                user_socket.send("Successful".encode())
+            except Exception as e:
+                user_socket.send(str(e).encode())
         else:
             user_socket.send("invalid command".encode())
 
@@ -234,14 +241,14 @@ def show_tickets(user, tickets_user):
     res = "These are all tickets:\n"
     for ticket_id in tickets_user:
         ticket = tickets[ticket_id]
-        if ticket.status == "sent":
+        res += f'Ticket_id: {ticket_id}\n'
+        if ticket.status == "closed":
             continue
         for i in range(0, len(ticket.message_sender)):
-            if i == len(ticket.message_sender) - 1 and len(ticket.message_sender) > len(ticket.message_receiver):
-                res += f'\nticket id: {ticket.id}\nsender: {ticket.message_sender[i]}\n'
-            else:
-                res += f'\nsender: {ticket.message_sender[i]}' \
-                       f'\nreceiver: {ticket.message_receiver[i]}\n'
+            res += f'\nsender: {ticket.message_sender[i]}'
+        for i in range(0, len(ticket.message_receiver)):
+            res += f'\nreciever: {ticket.message_receiver[i]}'
+        res += "\n"
     return res
 
 
@@ -249,23 +256,25 @@ def show_sent_tickets(user, tickets_user):
     res = "These are sent tickets:\n"
     for ticket_id in tickets_user:
         ticket = tickets[ticket_id]
-        if ticket.status != "sent":
+        res += f'Ticket_id: {ticket_id}\n'
+        if ticket.status != "closed":
             continue
         for i in range(0, len(ticket.message_sender)):
-            if i == len(ticket.message_sender) and len(ticket.message_sender) > len(ticket.message_receiver):
-                res += f'\nsender: {ticket.message_sender[i]}'
-            else:
-                res += f'\nsender: {ticket.message_sender[i]}' \
-                       f'\nreceiver: {ticket.message_receiver[i]}'
+            res += f'\nsender: {ticket.message_sender[i]}'
+        for i in range(0, len(ticket.message_receiver)):
+            res += f'\nreciever: {ticket.message_receiver[i]}'
+        res += "\n"
     return res
 
 
 def add_message_to_ticket(ticket_id, message, user):
     ticket = tickets[ticket_id]
+    if user.status == "closed":
+        raise Exception("You don't have access to this ticket")
     if user.type != "manager" and ticket_id in user.sent_tickets:
         ticket.message_sender.append(message)
     elif user.type != "user" and ticket_id in user.received_tickets:
-        ticket.message_receiver.appent(message)
+        ticket.message_receiver.append(message)
     else:
         raise Exception("You don't have access to this ticket")
 
@@ -285,6 +294,10 @@ def create_new_ticket(message, sender_user_name, receiver):
     else:
         raise Exception("Invalid sender and receiver")
 
+def change_ticket_status(ticket_id, status):
+    ticket = tickets[ticket_id]
+    ticket.status = status
+
 
 def handle_admin_request(user_socket, admin, number_of_req, start_time):
     print("admin mode")
@@ -297,7 +310,7 @@ def handle_admin_request(user_socket, admin, number_of_req, start_time):
             return
         if command.startswith("help"):
             user_socket.send(
-                "logout\nadmin create new ticket\nadmin add message to ticket\nadmin show tickets\nadmin show sent "
+                "admin logout\nadmin create new ticket\nadmin add message to ticket\nadmin show tickets\nadmin show sent "
                 "tickets\nshow all videos\nadd limitation\ndelete video\n".encode())
         elif command.startswith("show all videos"):
             send_list_of_videos(user_socket)
@@ -338,13 +351,19 @@ def handle_admin_request(user_socket, admin, number_of_req, start_time):
             response += show_tickets(admin, admin.sent_tickets)
             user_socket.send(response.encode())
         elif command.startswith("admin add message to ticket"):
-            ticket_id = command.split()[2]
+            ticket_id = int(command.split()[5])
+            user_socket.send("message: ".encode())
             message = user_socket.recv(1024).decode()
             try:
-                add_message_to_ticket(ticket_id, message)
+                add_message_to_ticket(ticket_id, message, admin)
                 user_socket.send("Successful".encode())
             except Exception as e:
-                user_socket.send("Invalid ticket_id".encode())
+                user_socket.send(str(e).encode())
+        elif command.startswith("admin change ticket status"):
+            ticket_id = int(command.split()[4])
+            status = command.split()[5]
+            change_ticket_status(ticket_id, status)
+            user_socket.send("Successful".encode())
         elif command.startswith("admin create new ticket"):
             user_socket.send("message: ".encode())
             message = user_socket.recv(1024).decode()
@@ -418,11 +437,15 @@ def handle_request(user_socket, user_addr, start_time):
             except UsernameAlreadyExists:
                 user_socket.send("username already exist".encode())
         elif command.startswith("login_admin"):
-            username = command.split()[1]
-            password = command.split()[2]
-            user = authenticator.login(username, password)
-            user_socket.send("successful".encode())
-            handle_admin_request(user_socket, user, number_of_req, start_time)
+            try:
+                username = command.split()[1]
+                password = command.split()[2]
+                user = authenticator.login(username, password)
+                user_socket.send("successful".encode())
+                handle_admin_request(user_socket, user, number_of_req, start_time)
+            except AuthException:
+                user_socket.send("wrong username or password".encode())
+
         elif command.startswith("login"):
             try:
                 username = command.split()[1]
