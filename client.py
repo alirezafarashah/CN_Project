@@ -181,6 +181,11 @@ while True:
         client_socket.send(command.encode())
         result = client_socket.recv(1024).decode()
         print(result)
+    elif command.startswith("change ticket status"):
+        ticket_id = input("ticket_id: ")
+        status = input("status: ")
+        client_socket.send((command + " " + ticket_id + " " + status).encode())
+        print(client_socket.recv(1024).decode())
     # admin
     elif command.startswith("add limit"):
         video_name = input("video_name: ")

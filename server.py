@@ -128,10 +128,18 @@ def handle_user_client_request(user_socket, user, number_of_req, start_time):
             user_socket.send("You have successfully logged out".encode())
             return
         elif command.startswith("add message to ticket"):
-            ticket_id = int(command.split()[4])
-            message = user_socket.recv(1024).decode()
             try:
+                ticket_id = int(command.split()[4])
+                message = user_socket.recv(1024).decode()
                 add_message_to_ticket(ticket_id, message, user)
+                user_socket.send("Successful".encode())
+            except Exception as e:
+                user_socket.send(str(e).encode())
+        elif command.startswith("change ticket status"):
+            ticket_id = int(command.split()[3])
+            status = command.split()[4]
+            try:
+                change_ticket_status(ticket_id, status,user)
                 user_socket.send("Successful".encode())
             except Exception as e:
                 user_socket.send(str(e).encode())
@@ -225,6 +233,7 @@ def handle_manager_request(user_socket, manager, number_of_req, start_time):
         elif command.startswith("show tickets"):
             response = show_tickets(manager, manager.received_tickets)
             user_socket.send(response.encode())
+
         elif command.startswith("add message to ticket"):
             ticket_id = int(command.split()[4])
             message = user_socket.recv(1024).decode()
@@ -243,7 +252,7 @@ def show_tickets(user, tickets_user):
         ticket = tickets[ticket_id]
         res += f'Ticket_id: {ticket_id}\n'
         if ticket.status == "closed":
-            continue
+            res += "\nstatus = closed \n"
         for i in range(0, len(ticket.message_sender)):
             res += f'\nsender: {ticket.message_sender[i]}'
         for i in range(0, len(ticket.message_receiver)):
@@ -269,8 +278,8 @@ def show_sent_tickets(user, tickets_user):
 
 def add_message_to_ticket(ticket_id, message, user):
     ticket = tickets[ticket_id]
-    if user.status == "closed":
-        raise Exception("You don't have access to this ticket")
+    if ticket.status == "closed":
+        raise Exception("This ticket is closed")
     if user.type != "manager" and ticket_id in user.sent_tickets:
         ticket.message_sender.append(message)
     elif user.type != "user" and ticket_id in user.received_tickets:
@@ -294,9 +303,16 @@ def create_new_ticket(message, sender_user_name, receiver):
     else:
         raise Exception("Invalid sender and receiver")
 
-def change_ticket_status(ticket_id, status):
-    ticket = tickets[ticket_id]
-    ticket.status = status
+
+def change_ticket_status(ticket_id, status, user):
+    if status == "closed" or status == "pending" or status == "solved":
+        ticket = tickets[ticket_id]
+        if (ticket.receiver == "server" and user.type == "admin") or (ticket.sender == user.username):
+            ticket.status = status
+        else:
+            raise Exception("You don't have access to change this ticket status")
+    else:
+        raise Exception("Invalid status")
 
 
 def handle_admin_request(user_socket, admin, number_of_req, start_time):
@@ -362,8 +378,11 @@ def handle_admin_request(user_socket, admin, number_of_req, start_time):
         elif command.startswith("admin change ticket status"):
             ticket_id = int(command.split()[4])
             status = command.split()[5]
-            change_ticket_status(ticket_id, status)
-            user_socket.send("Successful".encode())
+            try:
+                change_ticket_status(ticket_id, status, admin)
+                user_socket.send("Successful".encode())
+            except Exception as e:
+                user_socket.send(str(e).encode())
         elif command.startswith("admin create new ticket"):
             user_socket.send("message: ".encode())
             message = user_socket.recv(1024).decode()
